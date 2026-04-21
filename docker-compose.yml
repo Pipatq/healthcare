@@ -1,0 +1,126 @@
+# =============================================================================
+# HIS-to-HIS Interoperability System
+#
+# Services:
+#   his_a_db        – PostgreSQL for HIS A (doctors / auth)
+#   his_b_db        – PostgreSQL for HIS B (legacy patient data)
+#   his_b           – HIS B FHIR Facade Microservice  (port 8002)
+#   gateway         – FHIR Interoperability Gateway   (port 8001)
+#   his_a_backend   – HIS A Backend (auth + FHIR proxy)(port 8000)
+#   his_a_frontend  – HIS A Doctor's Web Portal       (port 80)
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Databases
+  # ---------------------------------------------------------------------------
+  his_a_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: his_a
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - his_a_db_data:/var/lib/postgresql/data
+      - ./database/his_a_init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d his_a"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  his_b_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: his_b
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - his_b_db_data:/var/lib/postgresql/data
+      - ./database/his_b_init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d his_b"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # HIS B – FHIR Facade (Data Provider)
+  # Connects to his_b_db, maps legacy data → FHIR R5, protected by API Key.
+  # ---------------------------------------------------------------------------
+  his_b:
+    build: ./his_b/backend
+    ports:
+      - "8002:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@his_b_db:5432/his_b
+      API_KEY: ${HIS_B_API_KEY:-his-b-secret-key}
+      ENV: ${ENV:-dev}
+    depends_on:
+      his_b_db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # FHIR Interoperability Gateway (Routing Layer)
+  # Validates caller API Key, forwards requests to HIS B Facade.
+  # ---------------------------------------------------------------------------
+  gateway:
+    build: ./gateway
+    ports:
+      - "8001:8000"
+    environment:
+      HIS_B_BASE_URL: http://his_b:8000
+      HIS_B_API_KEY: ${HIS_B_API_KEY:-his-b-secret-key}
+      GATEWAY_API_KEY: ${GATEWAY_API_KEY:-gateway-secret-key}
+      ENV: ${ENV:-dev}
+    depends_on:
+      - his_b
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # HIS A Backend (Requesting System – API layer)
+  # JWT auth for doctors, proxies FHIR requests through the Gateway.
+  # ---------------------------------------------------------------------------
+  his_a_backend:
+    build: ./his_a/backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@his_a_db:5432/his_a
+      GATEWAY_BASE_URL: http://gateway:8000
+      GATEWAY_API_KEY: ${GATEWAY_API_KEY:-gateway-secret-key}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      ALLOWED_ORIGINS: http://localhost,http://localhost:80,http://127.0.0.1
+      ENV: ${ENV:-dev}
+    depends_on:
+      his_a_db:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # HIS A Frontend – Doctor's Web Portal (React + nginx)
+  # nginx reverse-proxies /api/ to his_a_backend.
+  # ---------------------------------------------------------------------------
+  his_a_frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - his_a_backend
+    restart: unless-stopped
+
+volumes:
+  his_a_db_data:
+  his_b_db_data:
