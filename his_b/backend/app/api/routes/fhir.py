@@ -144,3 +144,175 @@ async def get_service_request(
     if not sr:
         raise HTTPException(status_code=404, detail=f"ServiceRequest {sr_id} not found.")
     return sr
+
+
+# ---------------------------------------------------------------------------
+# Patient – PUT / DELETE
+# ---------------------------------------------------------------------------
+
+
+@router.put("/Patient/{patient_id}", summary="Update patient by HN",
+    description="อัปเดตข้อมูลผู้ป่วย\n\n**ตัวอย่าง patient_id:** `HN-0001`\n\n**API Key (X-API-Key):** `his-b-secret-key`\n\n**ตัวอย่าง body:**\n```json\n{\n  \"resourceType\": \"Patient\",\n  \"id\": \"HN-0001\",\n  \"name\": [{\"family\": \"ใจดี\", \"given\": [\"สมชาย\"]}],\n  \"gender\": \"male\",\n  \"birthDate\": \"1980-05-15\",\n  \"telecom\": [{\"system\": \"phone\", \"value\": \"0899999999\"}]\n}\n```")
+async def update_patient(
+    patient_id: str,
+    payload: dict[str, Any] = Body(...),
+    _: str = Depends(verify_api_key),
+) -> dict:
+    clean = _validate_fhir("Patient", payload)
+    result = await repository.update_patient(patient_id, clean)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Patient {patient_id!r} not found.")
+    logger.info("Updated patient HN={}", patient_id)
+    return result
+
+
+@router.delete("/Patient/{patient_id}", status_code=204, summary="Delete patient by HN",
+    description="ลบผู้ป่วยด้วย HN\n\n**ตัวอย่าง patient_id:** `HN-0099`\n\n**API Key (X-API-Key):** `his-b-secret-key`")
+async def delete_patient(
+    patient_id: str,
+    _: str = Depends(verify_api_key),
+) -> None:
+    deleted = await repository.delete_patient(patient_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Patient {patient_id!r} not found.")
+    logger.info("Deleted patient HN={}", patient_id)
+
+
+# ---------------------------------------------------------------------------
+# Observation – POST / PUT / DELETE
+# ---------------------------------------------------------------------------
+
+
+@router.post("/Observation", status_code=201, summary="Create a new observation",
+    description="บันทึกผลแลบใหม่\n\n**API Key (X-API-Key):** `his-b-secret-key`\n\n**ตัวอย่าง body:**\n```json\n{\n  \"resourceType\": \"Observation\",\n  \"status\": \"final\",\n  \"code\": {\"coding\": [{\"system\": \"http://loinc.org\", \"code\": \"718-7\", \"display\": \"Hemoglobin\"}]},\n  \"subject\": {\"reference\": \"Patient/HN-0001\"},\n  \"issued\": \"2026-04-23T10:00:00+07:00\",\n  \"valueQuantity\": {\"value\": 13.5, \"unit\": \"g/dL\", \"system\": \"http://unitsofmeasure.org\", \"code\": \"g/dL\"}\n}\n```")
+async def create_observation(
+    payload: dict[str, Any] = Body(
+        ...,
+        openapi_examples={
+            "hemoglobin": {
+                "summary": "ผลแลบ Hemoglobin ของ HN-0001",
+                "value": {
+                    "resourceType": "Observation",
+                    "status": "final",
+                    "code": {"coding": [{"system": "http://loinc.org", "code": "718-7", "display": "Hemoglobin"}]},
+                    "subject": {"reference": "Patient/HN-0001"},
+                    "issued": "2026-04-23T10:00:00+07:00",
+                    "valueQuantity": {"value": 13.5, "unit": "g/dL", "system": "http://unitsofmeasure.org", "code": "g/dL"},
+                },
+            },
+            "blood_pressure": {
+                "summary": "ผลแลบ Blood Pressure ของ HN-0005",
+                "value": {
+                    "resourceType": "Observation",
+                    "status": "final",
+                    "code": {"coding": [{"system": "http://loinc.org", "code": "55284-4", "display": "Blood pressure panel"}]},
+                    "subject": {"reference": "Patient/HN-0005"},
+                    "issued": "2026-04-23T10:00:00+07:00",
+                    "valueQuantity": {"value": 120, "unit": "mmHg", "system": "http://unitsofmeasure.org", "code": "mm[Hg]"},
+                },
+            },
+        },
+    ),
+    _: str = Depends(verify_api_key),
+) -> dict:
+    clean = _validate_fhir("Observation", payload)
+    result = await repository.create_observation(clean)
+    logger.info("Created observation id={}", result.get("id"))
+    return result
+
+
+@router.put("/Observation/{obs_id}", summary="Update observation by ID",
+    description="อัปเดตผลแลบด้วย ID\n\n**ตัวอย่าง obs_id:** `1`, `2`, `3`\n\n**API Key (X-API-Key):** `his-b-secret-key`")
+async def update_observation(
+    obs_id: int,
+    payload: dict[str, Any] = Body(...),
+    _: str = Depends(verify_api_key),
+) -> dict:
+    clean = _validate_fhir("Observation", payload)
+    result = await repository.update_observation(obs_id, clean)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Observation {obs_id} not found.")
+    logger.info("Updated observation id={}", obs_id)
+    return result
+
+
+@router.delete("/Observation/{obs_id}", status_code=204, summary="Delete observation by ID",
+    description="ลบผลแลบด้วย ID\n\n**ตัวอย่าง obs_id:** `1`, `2`, `3`\n\n**API Key (X-API-Key):** `his-b-secret-key`")
+async def delete_observation(
+    obs_id: int,
+    _: str = Depends(verify_api_key),
+) -> None:
+    deleted = await repository.delete_observation(obs_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Observation {obs_id} not found.")
+    logger.info("Deleted observation id={}", obs_id)
+
+
+# ---------------------------------------------------------------------------
+# ServiceRequest – POST / PUT / DELETE
+# ---------------------------------------------------------------------------
+
+
+@router.post("/ServiceRequest", status_code=201, summary="Create a new service request",
+    description="สร้างคำสั่งแพทย์ใหม่\n\n**API Key (X-API-Key):** `his-b-secret-key`\n\n**ตัวอย่าง body:**\n```json\n{\n  \"resourceType\": \"ServiceRequest\",\n  \"status\": \"active\",\n  \"intent\": \"order\",\n  \"priority\": \"routine\",\n  \"code\": {\"coding\": [{\"system\": \"urn:his-b:order-codes\", \"code\": \"CBC-001\", \"display\": \"Complete Blood Count\"}]},\n  \"subject\": {\"reference\": \"Patient/HN-0001\"}\n}\n```")
+async def create_service_request(
+    payload: dict[str, Any] = Body(
+        ...,
+        openapi_examples={
+            "cbc": {
+                "summary": "สั่ง CBC ให้ HN-0001",
+                "value": {
+                    "resourceType": "ServiceRequest",
+                    "status": "active",
+                    "intent": "order",
+                    "priority": "routine",
+                    "code": {"coding": [{"system": "urn:his-b:order-codes", "code": "CBC-001", "display": "Complete Blood Count"}]},
+                    "subject": {"reference": "Patient/HN-0001"},
+                },
+            },
+            "lipid_urgent": {
+                "summary": "สั่ง Lipid Panel ด่วน ให้ HN-0004",
+                "value": {
+                    "resourceType": "ServiceRequest",
+                    "status": "active",
+                    "intent": "order",
+                    "priority": "urgent",
+                    "code": {"coding": [{"system": "urn:his-b:order-codes", "code": "LIPID-001", "display": "Lipid Panel"}]},
+                    "subject": {"reference": "Patient/HN-0004"},
+                },
+            },
+        },
+    ),
+    _: str = Depends(verify_api_key),
+) -> dict:
+    clean = _validate_fhir("ServiceRequest", payload)
+    result = await repository.create_service_request(clean)
+    logger.info("Created ServiceRequest id={}", result.get("id"))
+    return result
+
+
+@router.put("/ServiceRequest/{sr_id}", summary="Update service request by ID",
+    description="อัปเดตคำสั่งแพทย์ด้วย ID\n\n**ตัวอย่าง sr_id:** `1`, `2`, `3`\n\n**API Key (X-API-Key):** `his-b-secret-key`")
+async def update_service_request(
+    sr_id: int,
+    payload: dict[str, Any] = Body(...),
+    _: str = Depends(verify_api_key),
+) -> dict:
+    clean = _validate_fhir("ServiceRequest", payload)
+    result = await repository.update_service_request(sr_id, clean)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"ServiceRequest {sr_id} not found.")
+    logger.info("Updated ServiceRequest id={}", sr_id)
+    return result
+
+
+@router.delete("/ServiceRequest/{sr_id}", status_code=204, summary="Delete service request by ID",
+    description="ลบคำสั่งแพทย์ด้วย ID\n\n**ตัวอย่าง sr_id:** `1`, `2`, `3`\n\n**API Key (X-API-Key):** `his-b-secret-key`")
+async def delete_service_request(
+    sr_id: int,
+    _: str = Depends(verify_api_key),
+) -> None:
+    deleted = await repository.delete_service_request(sr_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"ServiceRequest {sr_id} not found.")
+    logger.info("Deleted ServiceRequest id={}", sr_id)
