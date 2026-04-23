@@ -4,6 +4,7 @@ const navItems = [
   { to: '/patients', label: 'Patients' },
   { to: '/service-requests', label: 'Service Requests' },
   { to: '/observations', label: 'Observations' },
+  { to: '/api-explorer', label: 'API Explorer' },
 ]
 
 export default function DashboardLayout() {
