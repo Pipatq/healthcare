@@ -143,7 +143,18 @@ INSERT INTO encounters (patient_hn, status, class_code, class_display, period_st
     ('HN-0002', 'finished',    'AMB', 'outpatient encounter', '2026-04-20 10:00:00', '2026-04-20 11:30:00', 'Routine check-up'),
     ('HN-0003', 'in-progress', 'IMP', 'inpatient encounter',  '2026-04-22 07:00:00', NULL,                  'Acute renal failure'),
     ('HN-0004', 'planned',     'AMB', 'outpatient encounter', '2026-04-25 14:00:00', NULL,                  'Annual health screening'),
-    ('HN-0005', 'finished',    'EMER','emergency',            '2026-04-15 02:30:00', '2026-04-15 08:00:00', 'Chest pain')
+    ('HN-0005', 'finished',    'EMER','emergency',            '2026-04-15 02:30:00', '2026-04-15 08:00:00', 'Chest pain'),
+    -- ---------------------------------------------------------------
+    -- Patient history encounters (mental health + general follow-ups)
+    -- ---------------------------------------------------------------
+    ('HN-0001', 'finished',    'AMB', 'outpatient encounter', '2025-12-01 15:00:00', '2025-12-01 16:00:00', 'Mental Disorder — initial assessment'),
+    ('HN-0001', 'finished',    'AMB', 'outpatient encounter', '2026-02-14 13:30:00', '2026-02-14 14:15:00', 'Psychiatric follow-up — medication review'),
+    ('HN-0002', 'finished',    'AMB', 'outpatient encounter', '2026-01-20 10:00:00', '2026-01-20 10:45:00', 'Anxiety disorder — counselling session'),
+    ('HN-0003', 'finished',    'AMB', 'outpatient encounter', '2026-03-05 14:00:00', '2026-03-05 15:00:00', 'Depression screening (PHQ-9)'),
+    ('HN-0004', 'finished',    'AMB', 'outpatient encounter', '2026-03-18 09:30:00', '2026-03-18 10:00:00', 'Insomnia consultation'),
+    ('HN-0005', 'finished',    'EMER','emergency',            '2026-04-08 22:30:00', '2026-04-08 23:45:00', 'Acute panic attack'),
+    ('HN-0002', 'in-progress', 'IMP', 'inpatient encounter',  '2026-04-23 08:00:00', NULL,                  'Mood disorder — observation admission'),
+    ('HN-0004', 'planned',     'AMB', 'outpatient encounter', '2026-05-02 10:00:00', NULL,                  'Stress management — group therapy intake')
 ON CONFLICT DO NOTHING;
 
 -- ===========================================================================

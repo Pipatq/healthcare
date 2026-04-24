@@ -21,6 +21,11 @@ const STATUS_STYLES = {
   stopped: 'bg-orange-100 text-orange-700',
 }
 
+// HIS A is the data CONSUMER — medication requests are owned/published by HIS B.
+// Per interop requirements: HIS A can view but cannot mutate HIS B data.
+// Flip to false to re-enable Create/Edit/Delete for admin/demo use.
+const READ_ONLY = true
+
 export default function MedicationRequests() {
   const [medRequests, setMedRequests] = useState([])
   const [loading, setLoading] = useState(true)
@@ -134,14 +139,22 @@ export default function MedicationRequests() {
         <div>
           <h2 className="text-2xl font-semibold text-slate-900">Medication Requests</h2>
           <p className="mt-2 text-sm text-slate-500">บันทึกและจัดการรายการยาที่แพทย์สั่ง</p>
+          {READ_ONLY && (
+            <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Read-only · Published by HIS B
+            </p>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-        >
-          + New medication
-        </button>
+        {!READ_ONLY && (
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            + New medication
+          </button>
+        )}
       </div>
 
       {error && (
@@ -161,7 +174,7 @@ export default function MedicationRequests() {
               <th className="px-4 py-3">Medication</th>
               <th className="px-4 py-3">Dosage</th>
               <th className="px-4 py-3">Authored</th>
-              <th className="px-4 py-3">Actions</th>
+              {!READ_ONLY && <th className="px-4 py-3">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
@@ -187,30 +200,32 @@ export default function MedicationRequests() {
                   <td className="px-4 py-3 text-slate-900 font-medium">{coding.display ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600 text-xs max-w-[200px] truncate">{dosage}</td>
                   <td className="px-4 py-3 text-slate-600 text-xs">{authored}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(mr)}
-                        className="rounded-2xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(mr)}
-                        className="rounded-2xl bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+                  {!READ_ONLY && (
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(mr)}
+                          className="rounded-2xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(mr)}
+                          className="rounded-2xl bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               )
             })}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400 text-sm">
+                <td colSpan={READ_ONLY ? 7 : 8} className="px-4 py-8 text-center text-slate-400 text-sm">
                   No medication requests found.
                 </td>
               </tr>
@@ -219,7 +234,7 @@ export default function MedicationRequests() {
         </table>
       </div>
 
-      {modalOpen && (
+      {!READ_ONLY && modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-8">
           <div className="w-full max-w-2xl overflow-hidden rounded-[32px] bg-white shadow-2xl ring-1 ring-slate-200">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">

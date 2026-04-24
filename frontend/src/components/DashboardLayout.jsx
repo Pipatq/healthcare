@@ -6,6 +6,7 @@ const navItems = [
   { to: '/conditions', label: 'Conditions' },
   { to: '/medication-requests', label: 'Medications' },
   { to: '/api-explorer', label: 'API Explorer' },
+  { to: '/encounters', label: 'Encounters' },
 ]
 
 export default function DashboardLayout() {
