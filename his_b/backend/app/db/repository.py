@@ -740,7 +740,7 @@ async def create_medication_request(data: dict) -> dict:
 
     authored_raw = data.get("authoredOn")
     from datetime import datetime
-    authored_on = datetime.fromisoformat(authored_raw) if authored_raw else datetime.now()
+    authored_on = datetime.fromisoformat(authored_raw).replace(tzinfo=None) if authored_raw else datetime.now()
 
     row = await pool.fetchrow(
         """
@@ -771,7 +771,7 @@ async def update_medication_request(mr_id: int, data: dict) -> Optional[dict]:
 
     authored_raw = data.get("authoredOn")
     from datetime import datetime
-    authored_on = datetime.fromisoformat(authored_raw) if authored_raw else datetime.now()
+    authored_on = datetime.fromisoformat(authored_raw).replace(tzinfo=None) if authored_raw else datetime.now()
 
     row = await pool.fetchrow(
         """
