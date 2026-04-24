@@ -3,7 +3,8 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 const navItems = [
   { to: '/patients', label: 'Patients' },
   { to: '/service-requests', label: 'Service Requests' },
-  { to: '/observations', label: 'Observations' },
+  { to: '/conditions', label: 'Conditions' },
+  { to: '/medication-requests', label: 'Medications' },
   { to: '/api-explorer', label: 'API Explorer' },
 ]
 

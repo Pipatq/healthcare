@@ -386,3 +386,407 @@ async def delete_service_request(sr_id: int) -> bool:
     pool = get_pool()
     result = await pool.execute("DELETE FROM service_requests WHERE id = $1", sr_id)
     return result != "DELETE 0"
+
+
+# ---------------------------------------------------------------------------
+# Encounter – helpers + CRUD
+# ---------------------------------------------------------------------------
+
+def _encounter_to_fhir(row: Any) -> dict:
+    # FHIR R5: class is List[CodeableConcept], period renamed to actualPeriod,
+    # reason uses value[].concept structure (EncounterReason.value = CodeableReference[])
+    # PostgreSQL returns naive datetimes — append +07:00 so FHIR DateTime regex passes
+    def _dt(ts: Any) -> str:
+        s = ts.isoformat()
+        if s and '+' not in s and 'Z' not in s:
+            s += '+07:00'
+        return s
+
+    resource: dict = {
+        "resourceType": "Encounter",
+        "id": str(row["id"]),
+        "status": row["status"] or "in-progress",
+        "class": [
+            {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                        "code": row["class_code"],
+                        "display": row["class_display"] or row["class_code"],
+                    }
+                ]
+            }
+        ],
+        "subject": {"reference": f"Patient/{row['patient_hn']}"},
+        "actualPeriod": {
+            "start": _dt(row["period_start"]),
+        },
+    }
+    if row["period_end"]:
+        resource["actualPeriod"]["end"] = _dt(row["period_end"])
+    if row["reason"]:
+        resource["reason"] = [{"value": [{"concept": {"text": row["reason"]}}]}]
+    return resource
+
+
+async def list_encounters(patient_hn: Optional[str] = None) -> list[dict]:
+    pool = get_pool()
+    if patient_hn:
+        rows = await pool.fetch(
+            "SELECT * FROM encounters WHERE patient_hn = $1 ORDER BY period_start DESC",
+            patient_hn,
+        )
+    else:
+        rows = await pool.fetch("SELECT * FROM encounters ORDER BY period_start DESC")
+    return [_encounter_to_fhir(r) for r in rows]
+
+
+async def get_encounter(enc_id: int) -> Optional[dict]:
+    pool = get_pool()
+    row = await pool.fetchrow("SELECT * FROM encounters WHERE id = $1", enc_id)
+    return _encounter_to_fhir(row) if row else None
+
+
+async def create_encounter(data: dict) -> dict:
+    pool = get_pool()
+    subject = (data.get("subject") or {}).get("reference", "")
+    patient_hn = subject.split("/")[-1] if "/" in subject else subject
+
+    if not patient_hn:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="subject.reference (Patient HN) is required.")
+
+    exists = await pool.fetchval("SELECT hn FROM patients WHERE hn = $1", patient_hn)
+    if not exists:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Patient {patient_hn!r} not found.")
+
+    status_ = data.get("status", "in-progress")
+    # R5: class is a list of CodeableConcept
+    class_list = data.get("class") or [{}]
+    class_item = class_list[0] if isinstance(class_list, list) else class_list
+    class_coding = (class_item.get("coding") or [{}])[0]
+    class_code = class_coding.get("code", "AMB")
+    class_display = class_coding.get("display", "")
+
+    # R5: actualPeriod replaces period
+    period = data.get("actualPeriod") or data.get("period") or {}
+    period_start_raw = period.get("start")
+    period_end_raw = period.get("end")
+    from datetime import datetime
+    period_start = datetime.fromisoformat(period_start_raw) if period_start_raw else datetime.now()
+    period_end = datetime.fromisoformat(period_end_raw) if period_end_raw else None
+
+    # R5: reason[].value[].concept.text
+    reason_list = data.get("reason") or []
+    reason = None
+    if reason_list:
+        val = reason_list[0].get("value") or []
+        reason = (val[0].get("concept") or {}).get("text") if val else None
+
+    row = await pool.fetchrow(
+        """
+        INSERT INTO encounters (patient_hn, status, class_code, class_display, period_start, period_end, reason)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+        """,
+        patient_hn, status_, class_code, class_display, period_start, period_end, reason,
+    )
+    return _encounter_to_fhir(row)
+
+
+async def update_encounter(enc_id: int, data: dict) -> Optional[dict]:
+    pool = get_pool()
+    subject = (data.get("subject") or {}).get("reference", "")
+    patient_hn = subject.split("/")[-1] if "/" in subject else subject
+
+    status_ = data.get("status", "in-progress")
+    class_list = data.get("class") or [{}]
+    class_item = class_list[0] if isinstance(class_list, list) else class_list
+    class_coding = (class_item.get("coding") or [{}])[0]
+    class_code = class_coding.get("code", "AMB")
+    class_display = class_coding.get("display", "")
+
+    period = data.get("actualPeriod") or data.get("period") or {}
+    period_start_raw = period.get("start")
+    period_end_raw = period.get("end")
+    from datetime import datetime
+    period_start = datetime.fromisoformat(period_start_raw) if period_start_raw else datetime.now()
+    period_end = datetime.fromisoformat(period_end_raw) if period_end_raw else None
+
+    reason_list = data.get("reason") or []
+    reason = None
+    if reason_list:
+        val = reason_list[0].get("value") or []
+        reason = (val[0].get("concept") or {}).get("text") if val else None
+
+    row = await pool.fetchrow(
+        """
+        UPDATE encounters
+        SET patient_hn=$2, status=$3, class_code=$4, class_display=$5,
+            period_start=$6, period_end=$7, reason=$8
+        WHERE id=$1
+        RETURNING *
+        """,
+        enc_id, patient_hn, status_, class_code, class_display, period_start, period_end, reason,
+    )
+    return _encounter_to_fhir(row) if row else None
+
+
+async def delete_encounter(enc_id: int) -> bool:
+    pool = get_pool()
+    result = await pool.execute("DELETE FROM encounters WHERE id = $1", enc_id)
+    return result != "DELETE 0"
+
+
+# ---------------------------------------------------------------------------
+# Condition – helpers + CRUD
+# ---------------------------------------------------------------------------
+
+def _condition_to_fhir(row: Any) -> dict:
+    resource: dict = {
+        "resourceType": "Condition",
+        "id": str(row["id"]),
+        "clinicalStatus": {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                    "code": row["clinical_status"],
+                }
+            ]
+        },
+        "code": {
+            "coding": [
+                {
+                    "system": "http://hl7.org/fhir/sid/icd-10",
+                    "code": row["icd10_code"],
+                    "display": row["icd10_display"] or row["icd10_code"],
+                }
+            ]
+        },
+        "subject": {"reference": f"Patient/{row['patient_hn']}"},
+    }
+    if row["onset_date"]:
+        resource["onsetDateTime"] = row["onset_date"].isoformat()
+    if row["note"]:
+        resource["note"] = [{"text": row["note"]}]
+    return resource
+
+
+async def list_conditions(patient_hn: Optional[str] = None) -> list[dict]:
+    pool = get_pool()
+    if patient_hn:
+        rows = await pool.fetch(
+            "SELECT * FROM conditions WHERE patient_hn = $1 ORDER BY created_at DESC",
+            patient_hn,
+        )
+    else:
+        rows = await pool.fetch("SELECT * FROM conditions ORDER BY created_at DESC")
+    return [_condition_to_fhir(r) for r in rows]
+
+
+async def get_condition(cond_id: int) -> Optional[dict]:
+    pool = get_pool()
+    row = await pool.fetchrow("SELECT * FROM conditions WHERE id = $1", cond_id)
+    return _condition_to_fhir(row) if row else None
+
+
+async def create_condition(data: dict) -> dict:
+    pool = get_pool()
+    subject = (data.get("subject") or {}).get("reference", "")
+    patient_hn = subject.split("/")[-1] if "/" in subject else subject
+
+    if not patient_hn:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="subject.reference (Patient HN) is required.")
+
+    exists = await pool.fetchval("SELECT hn FROM patients WHERE hn = $1", patient_hn)
+    if not exists:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Patient {patient_hn!r} not found.")
+
+    clinical_status = (
+        ((data.get("clinicalStatus") or {}).get("coding") or [{}])[0].get("code", "active")
+    )
+    coding = ((data.get("code") or {}).get("coding") or [{}])[0]
+    icd10_code = coding.get("code", "")
+    icd10_display = coding.get("display", "")
+
+    onset_raw = data.get("onsetDateTime")
+    from datetime import date
+    onset_date = date.fromisoformat(onset_raw[:10]) if onset_raw else None
+
+    notes = data.get("note") or []
+    note = notes[0].get("text") if notes else None
+
+    row = await pool.fetchrow(
+        """
+        INSERT INTO conditions (patient_hn, clinical_status, icd10_code, icd10_display, onset_date, note)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+        """,
+        patient_hn, clinical_status, icd10_code, icd10_display, onset_date, note,
+    )
+    return _condition_to_fhir(row)
+
+
+async def update_condition(cond_id: int, data: dict) -> Optional[dict]:
+    pool = get_pool()
+    subject = (data.get("subject") or {}).get("reference", "")
+    patient_hn = subject.split("/")[-1] if "/" in subject else subject
+
+    clinical_status = (
+        ((data.get("clinicalStatus") or {}).get("coding") or [{}])[0].get("code", "active")
+    )
+    coding = ((data.get("code") or {}).get("coding") or [{}])[0]
+    icd10_code = coding.get("code", "")
+    icd10_display = coding.get("display", "")
+
+    onset_raw = data.get("onsetDateTime")
+    from datetime import date
+    onset_date = date.fromisoformat(onset_raw[:10]) if onset_raw else None
+
+    notes = data.get("note") or []
+    note = notes[0].get("text") if notes else None
+
+    row = await pool.fetchrow(
+        """
+        UPDATE conditions
+        SET patient_hn=$2, clinical_status=$3, icd10_code=$4, icd10_display=$5,
+            onset_date=$6, note=$7
+        WHERE id=$1
+        RETURNING *
+        """,
+        cond_id, patient_hn, clinical_status, icd10_code, icd10_display, onset_date, note,
+    )
+    return _condition_to_fhir(row) if row else None
+
+
+async def delete_condition(cond_id: int) -> bool:
+    pool = get_pool()
+    result = await pool.execute("DELETE FROM conditions WHERE id = $1", cond_id)
+    return result != "DELETE 0"
+
+
+# ---------------------------------------------------------------------------
+# MedicationRequest – helpers + CRUD
+# ---------------------------------------------------------------------------
+
+def _medication_request_to_fhir(row: Any) -> dict:
+    return {
+        "resourceType": "MedicationRequest",
+        "id": str(row["id"]),
+        "status": row["status"] or "active",
+        "intent": row["intent"] or "order",
+        "medication": {
+            "concept": {
+                "coding": [
+                    {
+                        "system": "http://www.whocc.no/atc",
+                        "code": row["atc_code"],
+                        "display": row["medication_display"] or row["atc_code"],
+                    }
+                ]
+            }
+        },
+        "subject": {"reference": f"Patient/{row['patient_hn']}"},
+        "dosageInstruction": [{"text": row["dosage_text"] or ""}] if row["dosage_text"] else [],
+        "authoredOn": row["authored_on"].isoformat(),
+    }
+
+
+async def list_medication_requests(patient_hn: Optional[str] = None) -> list[dict]:
+    pool = get_pool()
+    if patient_hn:
+        rows = await pool.fetch(
+            "SELECT * FROM medication_requests WHERE patient_hn = $1 ORDER BY authored_on DESC",
+            patient_hn,
+        )
+    else:
+        rows = await pool.fetch("SELECT * FROM medication_requests ORDER BY authored_on DESC")
+    return [_medication_request_to_fhir(r) for r in rows]
+
+
+async def get_medication_request(mr_id: int) -> Optional[dict]:
+    pool = get_pool()
+    row = await pool.fetchrow("SELECT * FROM medication_requests WHERE id = $1", mr_id)
+    return _medication_request_to_fhir(row) if row else None
+
+
+async def create_medication_request(data: dict) -> dict:
+    pool = get_pool()
+    subject = (data.get("subject") or {}).get("reference", "")
+    patient_hn = subject.split("/")[-1] if "/" in subject else subject
+
+    if not patient_hn:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="subject.reference (Patient HN) is required.")
+
+    exists = await pool.fetchval("SELECT hn FROM patients WHERE hn = $1", patient_hn)
+    if not exists:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Patient {patient_hn!r} not found.")
+
+    status_ = data.get("status", "active")
+    intent = data.get("intent", "order")
+
+    med_concept = (data.get("medication") or {}).get("concept") or {}
+    coding = (med_concept.get("coding") or [{}])[0]
+    atc_code = coding.get("code", "")
+    medication_display = coding.get("display", "")
+
+    dosage_list = data.get("dosageInstruction") or []
+    dosage_text = dosage_list[0].get("text") if dosage_list else None
+
+    authored_raw = data.get("authoredOn")
+    from datetime import datetime
+    authored_on = datetime.fromisoformat(authored_raw) if authored_raw else datetime.now()
+
+    row = await pool.fetchrow(
+        """
+        INSERT INTO medication_requests (patient_hn, status, intent, atc_code, medication_display, dosage_text, authored_on)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+        """,
+        patient_hn, status_, intent, atc_code, medication_display, dosage_text, authored_on,
+    )
+    return _medication_request_to_fhir(row)
+
+
+async def update_medication_request(mr_id: int, data: dict) -> Optional[dict]:
+    pool = get_pool()
+    subject = (data.get("subject") or {}).get("reference", "")
+    patient_hn = subject.split("/")[-1] if "/" in subject else subject
+
+    status_ = data.get("status", "active")
+    intent = data.get("intent", "order")
+
+    med_concept = (data.get("medication") or {}).get("concept") or {}
+    coding = (med_concept.get("coding") or [{}])[0]
+    atc_code = coding.get("code", "")
+    medication_display = coding.get("display", "")
+
+    dosage_list = data.get("dosageInstruction") or []
+    dosage_text = dosage_list[0].get("text") if dosage_list else None
+
+    authored_raw = data.get("authoredOn")
+    from datetime import datetime
+    authored_on = datetime.fromisoformat(authored_raw) if authored_raw else datetime.now()
+
+    row = await pool.fetchrow(
+        """
+        UPDATE medication_requests
+        SET patient_hn=$2, status=$3, intent=$4, atc_code=$5,
+            medication_display=$6, dosage_text=$7, authored_on=$8
+        WHERE id=$1
+        RETURNING *
+        """,
+        mr_id, patient_hn, status_, intent, atc_code, medication_display, dosage_text, authored_on,
+    )
+    return _medication_request_to_fhir(row) if row else None
+
+
+async def delete_medication_request(mr_id: int) -> bool:
+    pool = get_pool()
+    result = await pool.execute("DELETE FROM medication_requests WHERE id = $1", mr_id)
+    return result != "DELETE 0"

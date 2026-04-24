@@ -4,7 +4,8 @@ import RequireAuth from './components/RequireAuth'
 import Login from './pages/Login'
 import PatientList from './pages/PatientList'
 import ServiceRequests from './pages/ServiceRequests'
-import Observations from './pages/Observations'
+import Conditions from './pages/Conditions'
+import MedicationRequests from './pages/MedicationRequests'
 import ApiExplorer from './pages/ApiExplorer'
 
 export default function App() {
@@ -17,7 +18,8 @@ export default function App() {
             <Route index element={<Navigate to="/patients" replace />} />
             <Route path="patients" element={<PatientList />} />
             <Route path="service-requests" element={<ServiceRequests />} />
-            <Route path="observations" element={<Observations />} />
+            <Route path="conditions" element={<Conditions />} />
+            <Route path="medication-requests" element={<MedicationRequests />} />
             <Route path="api-explorer" element={<ApiExplorer />} />
           </Route>
         </Route>

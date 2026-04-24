@@ -90,3 +90,82 @@ INSERT INTO service_requests (patient_hn, order_code, display, priority, status)
     ('HN-0004', 'LIPID-001','Lipid Panel',                      'routine', 'active'),
     ('HN-0005', 'CARD-001', 'Cardiac Risk Assessment',          'urgent',  'active')
 ON CONFLICT DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- Encounter Table (hospital visits / admissions)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS encounters (
+    id              SERIAL      PRIMARY KEY,
+    patient_hn      TEXT        NOT NULL REFERENCES patients(hn),
+    status          TEXT        NOT NULL DEFAULT 'in-progress', -- planned, in-progress, finished, cancelled
+    class_code      TEXT        NOT NULL DEFAULT 'AMB',         -- IMP=inpatient, AMB=outpatient, EMER=emergency
+    class_display   TEXT,
+    period_start    TIMESTAMP   NOT NULL DEFAULT NOW(),
+    period_end      TIMESTAMP,
+    reason          TEXT,
+    created_at      TIMESTAMP   NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+-- Condition Table (diagnoses – ICD-10)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS conditions (
+    id               SERIAL     PRIMARY KEY,
+    patient_hn       TEXT       NOT NULL REFERENCES patients(hn),
+    clinical_status  TEXT       NOT NULL DEFAULT 'active',   -- active, resolved, inactive
+    icd10_code       TEXT       NOT NULL,
+    icd10_display    TEXT,
+    onset_date       DATE,
+    note             TEXT,
+    created_at       TIMESTAMP  NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+-- MedicationRequest Table (medication orders)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS medication_requests (
+    id                  SERIAL      PRIMARY KEY,
+    patient_hn          TEXT        NOT NULL REFERENCES patients(hn),
+    status              TEXT        NOT NULL DEFAULT 'active',  -- active, completed, cancelled
+    intent              TEXT        NOT NULL DEFAULT 'order',   -- order, plan
+    atc_code            TEXT        NOT NULL,
+    medication_display  TEXT,
+    dosage_text         TEXT,
+    authored_on         TIMESTAMP   NOT NULL DEFAULT NOW()
+);
+
+-- ===========================================================================
+-- Seed Data – Encounters
+-- ===========================================================================
+INSERT INTO encounters (patient_hn, status, class_code, class_display, period_start, period_end, reason) VALUES
+    ('HN-0001', 'finished',    'IMP', 'inpatient encounter',  '2026-04-10 08:00:00', '2026-04-12 14:00:00', 'Hypertension management'),
+    ('HN-0001', 'in-progress', 'AMB', 'outpatient encounter', '2026-04-24 09:00:00', NULL,                  'Follow-up diabetes'),
+    ('HN-0002', 'finished',    'AMB', 'outpatient encounter', '2026-04-20 10:00:00', '2026-04-20 11:30:00', 'Routine check-up'),
+    ('HN-0003', 'in-progress', 'IMP', 'inpatient encounter',  '2026-04-22 07:00:00', NULL,                  'Acute renal failure'),
+    ('HN-0004', 'planned',     'AMB', 'outpatient encounter', '2026-04-25 14:00:00', NULL,                  'Annual health screening'),
+    ('HN-0005', 'finished',    'EMER','emergency',            '2026-04-15 02:30:00', '2026-04-15 08:00:00', 'Chest pain')
+ON CONFLICT DO NOTHING;
+
+-- ===========================================================================
+-- Seed Data – Conditions
+-- ===========================================================================
+INSERT INTO conditions (patient_hn, clinical_status, icd10_code, icd10_display, onset_date, note) VALUES
+    ('HN-0001', 'active',   'I10',   'Essential (primary) hypertension',                       '2020-01-15', 'Controlled with medication'),
+    ('HN-0001', 'active',   'E11',   'Type 2 diabetes mellitus',                               '2022-03-01', 'HbA1c monitoring required'),
+    ('HN-0002', 'active',   'E78.5', 'Hyperlipidemia, unspecified',                            '2023-06-10', NULL),
+    ('HN-0003', 'active',   'N17',   'Acute kidney injury',                                    '2026-04-22', 'Admitted for treatment'),
+    ('HN-0004', 'resolved', 'J06.9', 'Acute upper respiratory infection',                      '2026-03-01', 'Fully recovered'),
+    ('HN-0005', 'active',   'I25.1', 'Atherosclerotic heart disease of native coronary artery','2021-07-04', 'Cardiac follow-up')
+ON CONFLICT DO NOTHING;
+
+-- ===========================================================================
+-- Seed Data – MedicationRequests
+-- ===========================================================================
+INSERT INTO medication_requests (patient_hn, status, intent, atc_code, medication_display, dosage_text) VALUES
+    ('HN-0001', 'active',    'order', 'C09AA02', 'Enalapril',   '10mg once daily (morning)'),
+    ('HN-0001', 'active',    'order', 'A10BA02', 'Metformin',   '500mg twice daily with meals'),
+    ('HN-0002', 'active',    'order', 'C10AA01', 'Simvastatin', '20mg once daily (evening)'),
+    ('HN-0003', 'active',    'order', 'B05BC01', 'Mannitol',    'IV 20% 100ml over 30 minutes PRN'),
+    ('HN-0005', 'active',    'order', 'B01AC06', 'Aspirin',     '100mg once daily'),
+    ('HN-0005', 'completed', 'order', 'C07AB02', 'Metoprolol',  '25mg twice daily')
+ON CONFLICT DO NOTHING;
