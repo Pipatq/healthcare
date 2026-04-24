@@ -6,7 +6,8 @@ import PatientList from './pages/PatientList'
 import ServiceRequests from './pages/ServiceRequests'
 import Conditions from './pages/Conditions'
 import MedicationRequests from './pages/MedicationRequests'
-import ApiExplorer from './pages/ApiExplorer'
+// import ApiExplorer from './pages/ApiExplorer'
+import Encounters from './pages/Encounters'
 
 export default function App() {
   return (
@@ -20,7 +21,8 @@ export default function App() {
             <Route path="service-requests" element={<ServiceRequests />} />
             <Route path="conditions" element={<Conditions />} />
             <Route path="medication-requests" element={<MedicationRequests />} />
-            <Route path="api-explorer" element={<ApiExplorer />} />
+            <Route path="encounters" element={<Encounters />} />
+            {/* <Route path="api-explorer" element={<ApiExplorer />} /> */}
           </Route>
         </Route>
       </Routes>
