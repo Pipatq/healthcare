@@ -34,7 +34,7 @@ const CLASS_STYLES = {
 // HIS A is the data CONSUMER — encounters are owned/published by HIS B.
 // Per interop requirements: HIS A can view but cannot mutate HIS B data.
 // Flip to false to re-enable Create/Edit/Delete for admin/demo use.
-const READ_ONLY = true
+const READ_ONLY = false
 
 export default function Encounters() {
   const [encounters, setEncounters] = useState([])

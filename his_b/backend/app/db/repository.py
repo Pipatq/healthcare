@@ -474,8 +474,8 @@ async def create_encounter(data: dict) -> dict:
     period_start_raw = period.get("start")
     period_end_raw = period.get("end")
     from datetime import datetime
-    period_start = datetime.fromisoformat(period_start_raw) if period_start_raw else datetime.now()
-    period_end = datetime.fromisoformat(period_end_raw) if period_end_raw else None
+    period_start = datetime.fromisoformat(period_start_raw).replace(tzinfo=None) if period_start_raw else datetime.now()
+    period_end = datetime.fromisoformat(period_end_raw).replace(tzinfo=None) if period_end_raw else None
 
     # R5: reason[].value[].concept.text
     reason_list = data.get("reason") or []
@@ -511,8 +511,8 @@ async def update_encounter(enc_id: int, data: dict) -> Optional[dict]:
     period_start_raw = period.get("start")
     period_end_raw = period.get("end")
     from datetime import datetime
-    period_start = datetime.fromisoformat(period_start_raw) if period_start_raw else datetime.now()
-    period_end = datetime.fromisoformat(period_end_raw) if period_end_raw else None
+    period_start = datetime.fromisoformat(period_start_raw).replace(tzinfo=None) if period_start_raw else datetime.now()
+    period_end = datetime.fromisoformat(period_end_raw).replace(tzinfo=None) if period_end_raw else None
 
     reason_list = data.get("reason") or []
     reason = None
